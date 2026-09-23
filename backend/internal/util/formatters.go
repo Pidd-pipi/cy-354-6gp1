@@ -46,3 +46,18 @@ func CreditLevelText(score int) string {
 func CategoryText(c string) string {
 	return constants.ProductCategoryText(c)
 }
+
+// ReportReasonText maps a product report reason to its Chinese label.
+func ReportReasonText(r string) string {
+	return constants.ReportReasonText(r)
+}
+
+// ReportStatusText maps a product report status to its Chinese label.
+func ReportStatusText(s string) string {
+	return constants.ReportStatusText(s)
+}
+
+// ReportActionText maps an admin report action to its Chinese label.
+func ReportActionText(a string) string {
+	return constants.ReportActionText(a)
+}

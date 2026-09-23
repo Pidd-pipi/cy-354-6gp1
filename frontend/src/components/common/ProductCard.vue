@@ -15,6 +15,9 @@
       <el-button size="small" @click="$emit('detail', product)">详情</el-button>
       <el-button v-if="!hideBuy" size="small" type="primary" :disabled="product.status !== 'on_sale'" @click="$emit('buy', product)">购买</el-button>
       <el-button v-if="showChat" size="small" @click="$emit('chat', product)">私信</el-button>
+      <el-button v-if="showReport" size="small" type="danger" plain
+        :disabled="product.status !== 'on_sale' || product.seller_id === currentUserId"
+        @click="$emit('report', product)">举报</el-button>
     </div>
   </el-card>
 </template>
@@ -23,8 +26,18 @@
 import type { Product } from '../../types'
 import { categoryLabel, productStatusLabel, productStatusType } from '../../constants/product'
 
-withDefaults(defineProps<{ product: Product; hideBuy?: boolean; showChat?: boolean }>(), { hideBuy: false, showChat: false })
-defineEmits<{ (e: 'detail', p: Product): void; (e: 'buy', p: Product): void; (e: 'chat', p: Product): void }>()
+withDefaults(defineProps<{ product: Product; hideBuy?: boolean; showChat?: boolean; showReport?: boolean; currentUserId?: number }>(), {
+  hideBuy: false,
+  showChat: false,
+  showReport: false,
+  currentUserId: 0,
+})
+defineEmits<{
+  (e: 'detail', p: Product): void
+  (e: 'buy', p: Product): void
+  (e: 'chat', p: Product): void
+  (e: 'report', p: Product): void
+}>()
 </script>
 
 <style scoped>

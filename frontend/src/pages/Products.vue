@@ -19,7 +19,8 @@
     </el-form>
     <el-row :gutter="16">
       <el-col v-for="p in products" :key="p.id" :span="6" class="col">
-        <ProductCard :product="p" @detail="showDetail" @buy="buy" @chat="chat" />
+        <ProductCard :product="p" show-chat show-report :current-user-id="authStore.user?.id || 0"
+          @detail="showDetail" @buy="buy" @chat="chat" @report="openReport" />
       </el-col>
     </el-row>
     <el-empty v-if="!loading && products.length === 0" description="暂无商品" />
@@ -33,7 +34,15 @@
         <el-descriptions-item label="状态">{{ productStatusLabel(current.status) }}</el-descriptions-item>
         <el-descriptions-item label="描述" :span="2">{{ current.description }}</el-descriptions-item>
       </el-descriptions>
+      <template v-if="current" #footer>
+        <el-button type="primary" :disabled="current.status !== 'on_sale'" @click="buy(current)">购买</el-button>
+        <el-button @click="chat(current)">私信</el-button>
+        <el-button type="danger" plain
+          :disabled="current.status !== 'on_sale' || current.seller_id === (authStore.user?.id || 0)"
+          @click="openReport(current)">举报</el-button>
+      </template>
     </el-dialog>
+    <ReportDialog ref="reportDialogRef" @submitted="load" />
   </div>
 </template>
 
@@ -41,6 +50,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import ProductCard from '../components/common/ProductCard.vue'
+import ReportDialog from '../components/common/ReportDialog.vue'
 import { PRODUCT_CATEGORIES, categoryLabel, productStatusLabel } from '../constants/product'
 import { useProducts } from '../hooks/useProducts'
 import { createTradeOrder } from '../api/tradeOrder'
@@ -53,12 +63,22 @@ const { products, loading, load } = useProducts()
 const query = reactive<{ category?: string; campus?: string; keyword?: string }>({})
 const detailVisible = ref(false)
 const current = ref<Product | null>(null)
+const reportDialogRef = ref<InstanceType<typeof ReportDialog> | null>(null)
 const authStore = useAuthStore()
 const router = useRouter()
 
 function showDetail(p: Product) {
   current.value = p
   detailVisible.value = true
+}
+
+function openReport(p: Product) {
+  if (!authStore.token) {
+    ElMessage.warning('请先登录')
+    router.push('/login')
+    return
+  }
+  reportDialogRef.value?.open(p)
 }
 
 async function buy(p: Product) {

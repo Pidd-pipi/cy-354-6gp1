@@ -78,6 +78,22 @@ export interface BookExchange {
   created_at: string
 }
 
+export interface ProductReport {
+  id: number
+  product_id: number
+  reporter_id: number
+  reason: string
+  description: string
+  status: string
+  handler_id: number | null
+  handle_remark: string
+  handled_at: string | null
+  created_at: string
+  product_title: string
+  product_status: string
+  duplicated: boolean
+}
+
 export interface PageResult<T> {
   items: T[]
   total: number

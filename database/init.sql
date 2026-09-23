@@ -94,6 +94,26 @@ CREATE TABLE IF NOT EXISTS book_exchanges (
   INDEX idx_book_exchanges_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 商品举报：同一人对同一商品至多保留一条 pending 记录（dedup_key 唯一，处理后清空以允许再次举报）
+CREATE TABLE IF NOT EXISTS product_reports (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  product_id BIGINT UNSIGNED NOT NULL,
+  reporter_id BIGINT UNSIGNED NOT NULL,
+  reason VARCHAR(24) NOT NULL,
+  description TEXT,
+  status VARCHAR(16) NOT NULL DEFAULT 'pending',
+  handler_id BIGINT UNSIGNED NULL,
+  handle_remark TEXT,
+  handled_at DATETIME(3) NULL,
+  dedup_key VARCHAR(48) NULL,
+  created_at DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+  UNIQUE INDEX uniq_product_reports_dedup (dedup_key),
+  INDEX idx_product_reports_product (product_id),
+  INDEX idx_product_reports_reporter (reporter_id),
+  INDEX idx_product_reports_status (status),
+  INDEX idx_product_reports_handler (handler_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- 种子账号（bcrypt）
 -- 13700000001/123456 小明同学；13700000002/123456 阿珍；13700000003/123456 二手达人；13800000001/admin123 平台管理员
 INSERT INTO users (phone, password_hash, nickname, avatar, role, campus, credit_score) VALUES

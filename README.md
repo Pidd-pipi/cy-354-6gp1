@@ -1,6 +1,6 @@
 # CampusMarket（校园二手交易平台）
 
-一款面向高校学生的校内 C2C 交易平台，覆盖闲置物品发布、价格协商私信、交易达成确认、信誉评分举报、毕业季专场与书籍交换等场景。
+一款面向高校学生的校内 C2C 交易平台，覆盖闲置物品发布、价格协商私信、交易达成确认、信誉评分举报、商品违规举报与管理员处理、毕业季专场与书籍交换等场景。
 
 ## 快速启动（Docker Compose 一键部署）
 
@@ -78,12 +78,12 @@ cy-354/
 │   ├── cmd/server/          # main.go + seed.go
 │   └── internal/
 │       ├── config/          # 环境变量配置
-│       ├── constants/       # product.go, trade.go, user.go, error_codes.go, log_templates.go, messages.go
-│       ├── model/           # user, product, conversation, message, trade_order, review, book_exchange
+│       ├── constants/       # product, report, trade.go, user.go, error_codes.go, log_templates.go, messages.go
+│       ├── model/           # user, product, product_report, conversation, message, trade_order, review, book_exchange
 │       ├── repository/      # GORM 仓库（按实体分文件）
 │       ├── service/         # 业务逻辑（按实体分文件）
 │       ├── handler/         # HTTP 处理器（按实体分文件）
-│       ├── router/          # router.go + 按实体路由文件
+│       ├── router/          # router.go + 按实体路由文件（含 product_reports）
 │       ├── middleware/      # auth, rbac, rate_limiter, error_handler, request_id
 │       ├── dto/             # 请求/响应结构体
 │       └── util/            # jwt, logger, formatters, app_error, credit_calculator, response
@@ -91,14 +91,14 @@ cy-354/
     ├── Dockerfile
     ├── nginx.conf
     └── src/
-        ├── api/             # user, product, conversation, tradeOrder, review, bookExchange
+        ├── api/             # user, product, productReport, conversation, tradeOrder, review, bookExchange
         ├── stores/          # authStore, userStore, productStore, tradeStore
-        ├── components/common/# ProductCard, ProductForm, MessageBubble, TradeStatusBadge, ExchangeCard
+        ├── components/common/# ProductCard, ProductForm, ReportDialog, MessageBubble, TradeStatusBadge, ExchangeCard
         ├── hooks/           # useAuth, useProducts, useConversations
-        ├── pages/           # Products, Publish, Messages, Orders, BookExchange, Graduation, Profile, Login, Register
+        ├── pages/           # Products, Publish, Messages, Orders, BookExchange, Graduation, Profile, AdminReports, Login, Register
         ├── router/          # index.ts + guards.ts
         ├── utils/           # request, dateFormat, priceFormatter
-        ├── constants/       # product, trade, user, errorCodes
+        ├── constants/       # product, report, trade, user, errorCodes
         └── types/           # 共享类型
 ```
 
@@ -141,6 +141,8 @@ cy-354/
   - `POST /api/v1/conversations`、`GET /api/v1/conversations/me`、`GET/POST /api/v1/conversations/:id/messages`
   - `POST /api/v1/trade-orders`、`GET /api/v1/trade-orders/me`、`POST /api/v1/trade-orders/:id/buyer-confirm|seller-confirm|cancel`
   - `POST /api/v1/reviews`、`GET /api/v1/reviews/me`
+  - `POST /api/v1/reports/products`（提交商品举报，重复提交返回原待处理记录）、`GET /api/v1/reports/products/me`（我的举报结果）
+  - `POST /api/v1/admin/reports/products/:id/handle`（管理员下架/驳回举报，原子生效）、`GET /api/v1/admin/reports/products`（待处理列表）
   - `GET/POST /api/v1/book-exchanges`、`POST /api/v1/book-exchanges/:id/close`
   - `GET /api/v1/admin/stats`（管理员）
 
@@ -171,10 +173,22 @@ cy-354/
 | POST | `/api/v1/trade-orders/:id/cancel` | 取消订单 | 登录 |
 | POST | `/api/v1/reviews` | 交易后评价（含信誉积分） | 登录 |
 | GET | `/api/v1/reviews/me` | 我收到的评价 | 登录 |
+| POST | `/api/v1/reports/products` | 对在售商品提交举报（原因+说明）；同一人对同一商品只留一条待处理记录，重复提交返回原记录 | 登录 |
+| GET | `/api/v1/reports/products/me` | 我的举报及处理结果 | 登录 |
 | GET | `/api/v1/book-exchanges` | 书籍交换列表 | 无 |
 | POST | `/api/v1/book-exchanges` | 发布换书请求（自动匹配） | 登录 |
 | POST | `/api/v1/book-exchanges/:id/close` | 关闭换书请求 | 本人 |
+| GET | `/api/v1/admin/reports/products` | 待处理举报列表 | 管理员 |
+| POST | `/api/v1/admin/reports/products/:id/handle` | 处理举报：`take_down` 下架商品（与举报结果同事务生效，商品已售出/已下架或被他人先处理则拒绝且两边不变）；`reject` 驳回（保留商品并记录原因） | 管理员 |
 | GET | `/api/v1/admin/stats` | 平台统计占位接口 | 管理员 |
+
+### 举报处理规则（ProductReport）
+
+- 学生只能举报**在售**且非本人发布的商品；原因取 `false_description`（虚假描述）/ `prohibited_item`（违禁物品）/ `fraud`（疑似诈骗）/ `other`（其他），附最多 500 字说明。
+- 同一学生对同一商品只保留一条 `pending` 记录（`dedup_key` 唯一索引兜底并发）；重复提交直接返回原记录并在响应消息中提示，不产生新数据。
+- 管理员**下架**：在单个数据库事务内先锁举报与商品行，商品仍是 `on_sale` 才把商品置为 `removed`、举报置为 `taken_down`；商品已售出/已下架或举报已被另一位管理员处理时返回 409，商品与举报均不改变。
+- 管理员**驳回**：必须填写原因；商品保持在售，举报置为 `rejected` 并记录处理人与原因，学生可在个人中心查看。
+- 举报处理后 `dedup_key` 清空，学生可对同一商品再次举报。
 
 ## 枚举出现位置清单
 
@@ -227,6 +241,7 @@ cy-354/
 - `src/stores/authStore.ts` `isAdmin()`
 - `src/hooks/useAuth.ts` `hasRole()`
 - `src/pages/Profile.vue` 角色展示
+- `src/pages/AdminReports.vue` 仅管理员导航/守卫可见
 
 后端 `backend/internal/constants/user.go`：
 
@@ -235,10 +250,39 @@ cy-354/
 - `UserRoleText()` 文案
 - `backend/internal/model/user.go` Role 字段
 - `backend/internal/middleware/rbac.go` 权限校验
-- `backend/internal/router/*.go` 路由权限（管理员接口）
+- `backend/internal/router/router.go` 管理员举报处理路由
 - `backend/internal/util/jwt.go` Claims.Role
 - `backend/internal/util/formatters.go` `RoleText()`
 - `backend/internal/constants/log_templates.go` 登录日志带角色
+
+### ReportStatus / ReportReason（pending/taken_down/rejected；false_description/prohibited_item/fraud/other）
+
+前端 `frontend/src/constants/report.ts`：
+
+- `REPORT_REASONS`、`REPORT_STATUSES`、`REPORT_ACTIONS` 常量定义
+- `reportReasonLabel()` / `reportReasonTag()` / `reportStatusLabel()` / `reportStatusType()` 映射
+- `src/components/common/ReportDialog.vue` 举报原因选择
+- `src/components/common/ProductCard.vue` 举报入口显隐
+- `src/pages/Products.vue`、`src/pages/Graduation.vue` 举报入口与弹窗
+- `src/pages/Profile.vue` 我的举报结果展示
+- `src/pages/AdminReports.vue` 待处理列表与下架/驳回操作
+- `src/router/index.ts` + `src/router/guards.ts` `requiresAdmin` 路由守卫
+
+后端 `backend/internal/constants/report.go`：
+
+- `ReportReason*`、`ReportStatus*`、`ReportAction*` 常量
+- `ReportReasons/ReportStatuses/ReportActions` 列表与 `Is*()` 校验
+- `ReportReasonText()` / `ReportStatusText()` / `ReportActionText()` 文案
+- `backend/internal/model/product_report.go` Reason/Status 字段、`dedup_key` 唯一索引
+- `backend/internal/dto/product_report.go` 请求与 `ProductReportView`
+- `backend/internal/repository/product_report_repository.go` 待处理去重与原子 `Complete()`
+- `backend/internal/service/product_report_service.go` 提交去重、下架事务状态机
+- `backend/internal/handler/product_report_handler.go` 学生/管理员端点
+- `backend/internal/router/product_reports.go` 路由（含 RBAC）
+- `backend/internal/util/formatters.go` `ReportReasonText/ReportStatusText/ReportActionText()`
+- `backend/internal/constants/log_templates.go` 举报提交/下架/驳回/冲突日志模板
+- `backend/internal/constants/error_codes.go`、`messages.go` 举报冲突与校验文案
+- `database/init.sql` `product_reports` 建表（含 `uniq_product_reports_dedup`）
 
 ## 质量说明
 

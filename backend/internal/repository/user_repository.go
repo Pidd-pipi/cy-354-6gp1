@@ -44,6 +44,16 @@ func (r *UserRepository) FindByID(ctx context.Context, id uint) (*model.User, er
 	return &u, nil
 }
 
+// FindByIDs returns users matching the given ids.
+func (r *UserRepository) FindByIDs(ctx context.Context, ids []uint) ([]model.User, error) {
+	if len(ids) == 0 {
+		return []model.User{}, nil
+	}
+	var items []model.User
+	err := db(ctx, r.db).Where("id IN ?", ids).Find(&items).Error
+	return items, err
+}
+
 // UpdateProfile updates nickname, avatar and campus.
 func (r *UserRepository) UpdateProfile(ctx context.Context, id uint, nickname, avatar, campus string) error {
 	return db(ctx, r.db).Model(&model.User{}).Where("id = ?", id).

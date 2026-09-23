@@ -17,8 +17,8 @@
             <el-empty v-if="messages.length === 0" description="选择左侧会话开始聊天" :image-size="60" />
           </div>
           <div class="chat-input">
-            <el-input v-model="content" placeholder="输入消息，可协商价格与约定交易" @keyup.enter="send" />
-            <el-button type="primary" @click="send">发送</el-button>
+            <el-input v-model="content" placeholder="输入消息，可协商价格与约定交易" @keyup.enter="sendCurrent" />
+            <el-button type="primary" @click="sendCurrent">发送</el-button>
           </div>
         </el-card>
       </el-col>
@@ -36,10 +36,11 @@ const { conversations, messages, activeId, loadConversations, open, send } = use
 const content = ref('')
 const authStore = useAuthStore()
 
-async function sendMsg() {
+async function sendCurrent() {
   if (!content.value.trim()) return
-  await send(content.value.trim())
+  const text = content.value.trim()
   content.value = ''
+  await send(text)
 }
 
 onMounted(() => {

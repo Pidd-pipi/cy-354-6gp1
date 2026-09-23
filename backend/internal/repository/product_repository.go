@@ -6,6 +6,7 @@ import (
 	"github.com/lp/campus-market/internal/model"
 	"github.com/lp/campus-market/internal/util"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // ProductRepository persists product rows.
@@ -70,6 +71,43 @@ func (r *ProductRepository) UpdateStatus(ctx context.Context, id uint, status st
 		return util.ErrNotFound
 	}
 	return nil
+}
+
+// UpdateStatusIfOnSale sets the product status only while the product is
+// still on sale; it returns ErrConflict when the product has already moved
+// out of the on_sale state (sold / removed / reserved by another flow).
+func (r *ProductRepository) UpdateStatusIfOnSale(ctx context.Context, id uint, status string) error {
+	res := db(ctx, r.db).Model(&model.Product{}).
+		Where("id = ? AND status = ?", id, "on_sale").
+		Update("status", status)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return util.ErrConflict
+	}
+	return nil
+}
+
+// FindByIDForUpdate returns the product row with a row lock, usable only
+// inside a transaction.
+func (r *ProductRepository) FindByIDForUpdate(ctx context.Context, id uint) (*model.Product, error) {
+	var p model.Product
+	err := db(ctx, r.db).Clauses(clause.Locking{Strength: "UPDATE"}).First(&p, id).Error
+	if err != nil {
+		return nil, normalizeError(err)
+	}
+	return &p, nil
+}
+
+// FindByIDs returns products matching the given ids.
+func (r *ProductRepository) FindByIDs(ctx context.Context, ids []uint) ([]model.Product, error) {
+	if len(ids) == 0 {
+		return []model.Product{}, nil
+	}
+	var items []model.Product
+	err := db(ctx, r.db).Where("id IN ?", ids).Find(&items).Error
+	return items, err
 }
 
 // Count returns the total product count.

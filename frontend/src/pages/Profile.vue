@@ -17,6 +17,31 @@
         </div>
       </el-card>
       <el-card class="section">
+        <template #header>🚩 我的举报</template>
+        <el-table :data="reports" empty-text="暂未提交过举报">
+          <el-table-column prop="id" label="ID" width="70" />
+          <el-table-column label="商品">
+            <template #default="{ row }">
+              <span>{{ row.product_title || '商品已删除' }}（#{{ row.product_id }}）</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="原因" width="100">
+            <template #default="{ row }">
+              <el-tag size="small" :type="reportReasonTag(row.reason) as any">{{ reportReasonLabel(row.reason) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="结果" width="90">
+            <template #default="{ row }">
+              <el-tag size="small" :type="reportStatusType(row.status) as any">{{ reportStatusLabel(row.status) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="handle_remark" label="处理说明" />
+          <el-table-column label="提交时间" width="150">
+            <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
+          </el-table-column>
+        </el-table>
+      </el-card>
+      <el-card class="section">
         <template #header>⭐ 收到的评价</template>
         <el-table :data="reviews">
           <el-table-column prop="id" label="ID" width="80" />
@@ -43,12 +68,15 @@ import { onMounted, ref } from 'vue'
 import { useAuthStore } from '../stores/authStore'
 import { roleLabel } from '../constants/user'
 import { ratingLabel } from '../constants/trade'
+import { reportReasonLabel, reportReasonTag, reportStatusLabel, reportStatusType } from '../constants/report'
 import { listMyReviews } from '../api/review'
+import { listMyProductReports } from '../api/productReport'
 import { formatDateTime } from '../utils/dateFormat'
-import type { Review } from '../types'
+import type { Review, ProductReport } from '../types'
 
 const authStore = useAuthStore()
 const reviews = ref<Review[]>([])
+const reports = ref<ProductReport[]>([])
 
 function creditLevel(score: number): string {
   if (score >= 200) return '极佳'
@@ -60,8 +88,9 @@ function creditLevel(score: number): string {
 
 onMounted(async () => {
   if (!authStore.token) return
-  const res = await listMyReviews()
-  reviews.value = res.data
+  const [reviewRes, reportRes] = await Promise.all([listMyReviews(), listMyProductReports()])
+  reviews.value = reviewRes.data
+  reports.value = reportRes.data
 })
 </script>
 

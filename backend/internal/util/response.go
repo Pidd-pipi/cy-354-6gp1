@@ -14,6 +14,11 @@ func OK(c *gin.Context, data interface{}) {
 	c.JSON(200, Response{Code: 0, Message: "ok", Data: data})
 }
 
+// OKWithMessage writes a success response carrying a custom user-facing message.
+func OKWithMessage(c *gin.Context, message string, data interface{}) {
+	c.JSON(200, Response{Code: 0, Message: message, Data: data})
+}
+
 // Fail writes an error response with the given HTTP status and business code.
 func Fail(c *gin.Context, status, code int, message string) {
 	c.JSON(status, Response{Code: code, Message: message, Data: nil})
