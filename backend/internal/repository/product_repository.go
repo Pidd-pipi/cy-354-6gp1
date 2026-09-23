@@ -72,6 +72,21 @@ func (r *ProductRepository) UpdateStatus(ctx context.Context, id uint, status st
 	return nil
 }
 
+// UpdateStatusIfOnSale atomically takes down an on-sale product. RowsAffected
+// == 0 means the product was sold or removed in the meantime.
+func (r *ProductRepository) UpdateStatusIfOnSale(ctx context.Context, id uint, status string) error {
+	res := db(ctx, r.db).Model(&model.Product{}).
+		Where("id = ? AND status = ?", id, "on_sale").
+		Update("status", status)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return util.ErrConflict
+	}
+	return nil
+}
+
 // Count returns the total product count.
 func (r *ProductRepository) Count(ctx context.Context) (int64, error) {
 	var n int64

@@ -17,6 +17,33 @@
         </div>
       </el-card>
       <el-card class="section">
+        <template #header>📢 我的举报</template>
+        <el-table :data="myReports" empty-text="暂未提交过举报">
+          <el-table-column prop="id" label="ID" width="70" />
+          <el-table-column label="商品" min-width="150">
+            <template #default="{ row }">
+              <router-link to="/products">#{{ row.product_id }} {{ productTitle(row.product_id) }}</router-link>
+            </template>
+          </el-table-column>
+          <el-table-column label="原因" width="100">
+            <template #default="{ row }">
+              <el-tag size="small">{{ reportReasonLabel(row.reason) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="90">
+            <template #default="{ row }">
+              <el-tag size="small" :type="reportStatusType(row.status) as any">{{ reportStatusLabel(row.status) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="处理说明" min-width="160">
+            <template #default="{ row }">{{ row.handle_remark || (row.status === 'pending' ? '等待管理员处理' : '—') }}</template>
+          </el-table-column>
+          <el-table-column label="提交时间" width="150">
+            <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
+          </el-table-column>
+        </el-table>
+      </el-card>
+      <el-card class="section">
         <template #header>⭐ 收到的评价</template>
         <el-table :data="reviews">
           <el-table-column prop="id" label="ID" width="80" />
@@ -43,12 +70,21 @@ import { onMounted, ref } from 'vue'
 import { useAuthStore } from '../stores/authStore'
 import { roleLabel } from '../constants/user'
 import { ratingLabel } from '../constants/trade'
+import { reportReasonLabel, reportStatusLabel, reportStatusType } from '../constants/report'
 import { listMyReviews } from '../api/review'
+import { listMyReports } from '../api/report'
+import { listProducts } from '../api/product'
 import { formatDateTime } from '../utils/dateFormat'
-import type { Review } from '../types'
+import type { Product, Review, Report } from '../types'
 
 const authStore = useAuthStore()
 const reviews = ref<Review[]>([])
+const myReports = ref<Report[]>([])
+const productMap = ref<Record<number, Product>>({})
+
+function productTitle(id: number): string {
+  return productMap.value[id]?.title ?? ''
+}
 
 function creditLevel(score: number): string {
   if (score >= 200) return '极佳'
@@ -60,8 +96,14 @@ function creditLevel(score: number): string {
 
 onMounted(async () => {
   if (!authStore.token) return
-  const res = await listMyReviews()
-  reviews.value = res.data
+  const [reviewRes, reportRes, productRes] = await Promise.all([
+    listMyReviews(),
+    listMyReports(),
+    listProducts({ page: 1, page_size: 100 }),
+  ])
+  reviews.value = reviewRes.data
+  myReports.value = reportRes.data
+  productMap.value = Object.fromEntries(productRes.data.items.map((p) => [p.id, p]))
 })
 </script>
 

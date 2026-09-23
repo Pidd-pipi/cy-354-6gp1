@@ -79,7 +79,7 @@ cy-354/
 │   └── internal/
 │       ├── config/          # 环境变量配置
 │       ├── constants/       # product.go, trade.go, user.go, error_codes.go, log_templates.go, messages.go
-│       ├── model/           # user, product, conversation, message, trade_order, review, book_exchange
+│       ├── model/           # user, product, conversation, message, trade_order, review, book_exchange, report
 │       ├── repository/      # GORM 仓库（按实体分文件）
 │       ├── service/         # 业务逻辑（按实体分文件）
 │       ├── handler/         # HTTP 处理器（按实体分文件）
@@ -91,7 +91,7 @@ cy-354/
     ├── Dockerfile
     ├── nginx.conf
     └── src/
-        ├── api/             # user, product, conversation, tradeOrder, review, bookExchange
+        ├── api/             # user, product, conversation, tradeOrder, review, bookExchange, report
         ├── stores/          # authStore, userStore, productStore, tradeStore
         ├── components/common/# ProductCard, ProductForm, MessageBubble, TradeStatusBadge, ExchangeCard
         ├── hooks/           # useAuth, useProducts, useConversations
@@ -142,6 +142,8 @@ cy-354/
   - `POST /api/v1/trade-orders`、`GET /api/v1/trade-orders/me`、`POST /api/v1/trade-orders/:id/buyer-confirm|seller-confirm|cancel`
   - `POST /api/v1/reviews`、`GET /api/v1/reviews/me`
   - `GET/POST /api/v1/book-exchanges`、`POST /api/v1/book-exchanges/:id/close`
+  - `POST /api/v1/reports`、`GET /api/v1/reports/me`（学生提交/查看商品举报，重复提交返回原记录）
+  - `GET /api/v1/admin/reports`、`POST /api/v1/admin/reports/:id/handle`（管理员举报处理）
   - `GET /api/v1/admin/stats`（管理员）
 
 ## API 接口清单
@@ -171,6 +173,10 @@ cy-354/
 | POST | `/api/v1/trade-orders/:id/cancel` | 取消订单 | 登录 |
 | POST | `/api/v1/reviews` | 交易后评价（含信誉积分） | 登录 |
 | GET | `/api/v1/reviews/me` | 我收到的评价 | 登录 |
+| POST | `/api/v1/reports` | 举报在售商品（虚假描述/违禁物品），重复提交返回原记录 | 登录 |
+| GET | `/api/v1/reports/me` | 我提交的举报及处理结果 | 登录 |
+| GET | `/api/v1/admin/reports` | 举报列表（默认待处理，可按 status 筛选分页） | 管理员 |
+| POST | `/api/v1/admin/reports/:id/handle` | 处理举报：`take_down` 商品下架+举报成立同时生效；`reject` 保留商品并记录原因 | 管理员 |
 | GET | `/api/v1/book-exchanges` | 书籍交换列表 | 无 |
 | POST | `/api/v1/book-exchanges` | 发布换书请求（自动匹配） | 登录 |
 | POST | `/api/v1/book-exchanges/:id/close` | 关闭换书请求 | 本人 |
@@ -218,9 +224,7 @@ cy-354/
 - `backend/internal/constants/log_templates.go` 交易日志模板
 - `backend/internal/constants/error_codes.go` 状态冲突错误码
 
-### UserRole（student/admin）
-
-前端 `frontend/src/constants/user.ts`：
+### UserRole（student/admin）前端 `frontend/src/constants/user.ts`：
 
 - `USER_ROLES` 常量定义
 - `roleLabel()` 映射
@@ -239,6 +243,31 @@ cy-354/
 - `backend/internal/util/jwt.go` Claims.Role
 - `backend/internal/util/formatters.go` `RoleText()`
 - `backend/internal/constants/log_templates.go` 登录日志带角色
+
+### ReportReason / ReportStatus（fake_description/prohibited_item；pending/taken_down/rejected）
+
+前端 `frontend/src/constants/report.ts`：
+
+- `REPORT_REASONS` / `REPORT_STATUSES` / `REPORT_ACTIONS` 常量定义
+- `reportReasonLabel()` / `reportStatusLabel()` / `reportStatusType()` 映射
+- `src/components/common/ReportDialog.vue` 举报原因选择
+- `src/pages/Profile.vue` 我的举报结果展示
+- `src/pages/AdminReports.vue` 管理员待处理列表与处理操作
+- `src/components/common/ProductCard.vue` 举报入口按钮显隐
+- `src/router/guards.ts` 管理员路由守卫
+
+后端 `backend/internal/constants/report.go`：
+
+- `ReportReasonFakeDescription/ProhibitedItem`、`ReportStatusPending/TakenDown/Rejected` 常量
+- `ReportReasons/ReportStatuses/ReportActions` 列表、`IsReportReason()`、`IsReportStatus()`、`IsReportAction()`
+- `ReportReasonText()` / `ReportStatusText()` / `ReportActionText()` 文案
+- `backend/internal/model/report.go` Reason/Status 字段
+- `backend/internal/service/report_service.go` 举报提交幂等与处理状态机
+- `backend/internal/repository/report_repository.go` 唯一索引与条件更新（并发处理防护）
+- `backend/internal/dto/report.go` 请求校验（oneof）
+- `backend/internal/util/formatters.go` `ReportStatusText()` / `ReportReasonText()` / `ReportActionText()`
+- `backend/internal/constants/log_templates.go` 举报提交/处理/驳回日志模板
+- `backend/internal/constants/messages.go` `MsgReportHandled` 冲突文案
 
 ## 质量说明
 
